@@ -18,21 +18,40 @@ provider "aws" {
 
 # VPC
 resource "aws_vpc" "main" {
-  cidr_block = "10.1.0.0/16"
+  cidr_block = var.vpc_cidr
   tags = {
     Name = var.name_tag
   }
 }
 
 # subnets
-resource "aws_subnet" "main" {
-  for_each          = var.subnets
+resource "aws_subnet" "private" {
   vpc_id            = aws_vpc.main.id
-  cidr_block        = each.value.cidr_block
-  availability_zone = "${var.region}${each.value.availability_zone}"
+  cidr_block        = var.subnet_private
+  availability_zone = "${var.region}a"
 
   tags = {
-    Name = "${var.name_tag}-${each.key}"
+    Name = "${var.name_tag}-private"
+  }
+}
+
+resource "aws_subnet" "public1" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.subnet_public1
+  availability_zone = "${var.region}a"
+
+  tags = {
+    Name = "${var.name_tag}-public1"
+  }
+}
+
+resource "aws_subnet" "public2" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.subnet_public2
+  availability_zone = "${var.region}b"
+
+  tags = {
+    Name = "${var.name_tag}-public2"
   }
 }
 
@@ -56,7 +75,7 @@ resource "aws_eip" "nat" {
 # NAT gateway
 resource "aws_nat_gateway" "nat" {
   allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.main["public1"].id
+  subnet_id     = aws_subnet.public1.id
 
   tags = {
     Name = var.name_tag
@@ -68,12 +87,19 @@ resource "aws_nat_gateway" "nat" {
 }
 
 # security groups
-resource "aws_security_group" "sg" {
-  for_each = var.security_groups
-  vpc_id   = aws_vpc.main.id
-  name     = "${var.name_tag}-${each.key}"
+resource "aws_security_group" "private" {
+  vpc_id = aws_vpc.main.id
+  name   = "${var.name_tag}-private"
   tags = {
-    Name = "${var.name_tag}-${each.key}"
+    Name = "${var.name_tag}-private"
+  }
+}
+
+resource "aws_security_group" "public" {
+  vpc_id = aws_vpc.main.id
+  name   = "${var.name_tag}-public"
+  tags = {
+    Name = "${var.name_tag}-public"
   }
 }
 
@@ -85,7 +111,7 @@ resource "aws_default_route_table" "default" {
   default_route_table_id = aws_vpc.main.default_route_table_id
 
   route {
-    cidr_block = local.all_ips[0]
+    cidr_block = local.all_ips
     gateway_id = aws_internet_gateway.gw.id
   }
 
@@ -95,24 +121,22 @@ resource "aws_default_route_table" "default" {
 }
 
 # rtb for nat
-resource "aws_route_table" "example" {
+resource "aws_route_table" "nat" {
   vpc_id = aws_vpc.main.id
 
   route {
-    cidr_block     = local.all_ips[0]
+    cidr_block     = local.all_ips
     nat_gateway_id = aws_nat_gateway.nat.id
   }
-
-
 
   tags = {
     Name = var.name_tag
   }
 }
 # associate nat rtb with subnet
-resource "aws_route_table_association" "a" {
-  subnet_id      = aws_subnet.main["private"].id
-  route_table_id = aws_route_table.example.id
+resource "aws_route_table_association" "nat" {
+  subnet_id      = aws_subnet.private.id
+  route_table_id = aws_route_table.nat.id
 }
 
 # RSA key of size 4096 bits
@@ -129,12 +153,12 @@ resource "aws_key_pair" "paul-tf" {
 
 # EC2 instance
 resource "aws_instance" "web" {
-  ami                         = "ami-0042da0ea9ad6dd83"
-  instance_type               = "t2.micro"
+  ami                         = var.ami
+  instance_type               = var.instance_type
   key_name                    = aws_key_pair.paul-tf.key_name
-  vpc_security_group_ids      = [aws_security_group.sg["private"].id]
+  vpc_security_group_ids      = [aws_security_group.private.id]
   associate_public_ip_address = false
-  subnet_id                   = aws_subnet.main["private"].id
+  subnet_id                   = aws_subnet.private.id
 
   tags = {
     Name = var.name_tag
@@ -148,22 +172,48 @@ resource "aws_instance" "web" {
 
 }
 
+# target group
+resource "aws_lb_target_group" "web" {
+  name     = "${var.name_tag}-http"
+  port     = var.http_port
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+}
+# register instance to target group
+resource "aws_lb_target_group_attachment" "web" {
+  target_group_arn = aws_lb_target_group.web.arn
+  target_id        = aws_instance.web.id
+  port             = var.http_port
+}
+
+# load balancer
+resource "aws_lb" "app" {
+  name               = var.name_tag
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.public.id]
+  subnets            = [aws_subnet.public1.id, aws_subnet.public2.id]
+
+  tags = {
+    Environment = var.name_tag
+  }
+}
 
 ## route53 fqdn
 # fetch zone
 data "aws_route53_zone" "selected" {
-  name         = "tf-support.hashicorpdemo.com"
+  name         = var.route53_zone
   private_zone = false
 }
 # create record
 resource "aws_route53_record" "www" {
   zone_id = data.aws_route53_zone.selected.zone_id
-  name    = "paulskillsmap9tf.${data.aws_route53_zone.selected.name}"
+  name    = "${var.route53_subdomain}.${var.route53_zone}"
   type    = "A"
 
   alias {
-    name                   = aws_lb.test.dns_name
-    zone_id                = aws_lb.test.zone_id
+    name                   = aws_lb.app.dns_name
+    zone_id                = aws_lb.app.zone_id
     evaluate_target_health = true
   }
 }
@@ -177,7 +227,7 @@ resource "tls_private_key" "cert_private_key" {
 # register
 resource "acme_registration" "registration" {
   account_key_pem = tls_private_key.cert_private_key.private_key_pem
-  email_address   = "paul.boekschoten@hashicorp.com"
+  email_address   = var.cert_email
 }
 # get certificate
 resource "acme_certificate" "certificate" {
@@ -200,90 +250,27 @@ resource "aws_acm_certificate" "cert" {
   certificate_chain = acme_certificate.certificate.issuer_pem
 }
 
-# target group
-resource "aws_lb_target_group" "test" {
-  name     = "${var.name_tag}-http"
-  port     = 80
-  protocol = "HTTP"
-  vpc_id   = aws_vpc.main.id
-}
-# register instance to target group
-resource "aws_lb_target_group_attachment" "test" {
-  target_group_arn = aws_lb_target_group.test.arn
-  target_id        = aws_instance.web.id
-  port             = 80
-}
-
-# load balancer
-resource "aws_lb" "test" {
-  name               = var.name_tag
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.sg["public"].id]
-  subnets            = [aws_subnet.main["public1"].id, aws_subnet.main["public2"].id]
-
-  tags = {
-    Environment = var.name_tag
-  }
-}
-
 # listeners
 resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.test.arn
-  port              = "80"
+  load_balancer_arn = aws_lb.app.arn
+  port              = var.http_port
   protocol          = "HTTP"
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.test.arn
+    target_group_arn = aws_lb_target_group.web.arn
   }
 }
 
 resource "aws_lb_listener" "https" {
-  load_balancer_arn = aws_lb.test.arn
-  port              = "443"
+  load_balancer_arn = aws_lb.app.arn
+  port              = var.https_port
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-2016-08"
   certificate_arn   = aws_acm_certificate.cert.arn
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.test.arn
+    target_group_arn = aws_lb_target_group.web.arn
   }
 }
-
-## load balancer ssh
-#resource "aws_lb" "ssh" {
-#  name               = var.name_tag
-#  internal           = false
-#  load_balancer_type = "network"
-#  subnets            = [aws_subnet.main["public1"].id, aws_subnet.main["public2"].id]
-#
-#  tags = {
-#    Environment = var.name_tag
-#  }
-#}
-#
-#resource "aws_lb_target_group" "ssh" {
-#  name     = "${var.name_tag}-ssh"
-#  port     = 22
-#  protocol = "TCP"
-#  vpc_id   = aws_vpc.main.id
-#}
-#
-#resource "aws_lb_listener" "ssh" {
-#  load_balancer_arn = aws_lb.ssh.arn
-#  port              = "22"
-#  protocol          = "TCP"
-#
-#  default_action {
-#    type             = "forward"
-#    target_group_arn = aws_lb_target_group.ssh.arn
-#  }
-#}
-#
-#resource "aws_lb_target_group_attachment" "ssh" {
-#  target_group_arn = aws_lb_target_group.ssh.arn
-#  target_id        = aws_instance.web.id
-#  port             = 22
-#}

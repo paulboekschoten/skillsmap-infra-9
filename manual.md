@@ -100,7 +100,7 @@ Go to  Route 53, Hosted Zones, tf-support.hashicorpdemo.com
 Create  
 ![](media/2022-06-08-13-58-09.png)
 Note, the ip address does not match the loadbalancer, because it doesn't exist yet.  
-This needs to be chnaged later when LB IP is known.  
+This needs to be changed later when LB IP is known.  
 
 # cert from let's encrypt
 On a UNIX machine with certbot installed

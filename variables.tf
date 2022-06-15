@@ -13,7 +13,7 @@ variable "route53_zone" {
 variable "route53_subdomain" {
   description = "the subdomain of the url"
   type        = string
-  default     = "paulskillsmap9tf"
+  default     = "paulskillsmap9tf2"
 }
 
 variable "name_tag" {

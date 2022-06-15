@@ -2,14 +2,14 @@
 Skillsmap cloud/infra tab, exercise line 9
 
 # Task
-on AWS. 
-create VPC. 
-create 2 subnets, one for public network, one for private network. 
-create internet gw and connect to public network. 
-create nat gateway, and connect to private network. 
-create ec2 instance without public ip, only private subnet. 
-create a LB on https (check Application Load Balancer or Network Load Balancer). 
-publish a service over LB, ie nginx http or https. 
+on AWS.  
+create VPC.  
+create 2 subnets, one for public network, one for private network.  
+create internet gw and connect to public network.  
+create nat gateway, and connect to private network.  
+create ec2 instance without public ip, only private subnet.  
+create a LB on https (check Application Load Balancer or Network Load Balancer).  
+publish a service over LB, ie nginx http or https.  
 
 # Usage
 Git clone

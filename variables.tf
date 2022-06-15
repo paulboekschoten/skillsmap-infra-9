@@ -1,19 +1,16 @@
 variable "cert_email" {
   description = "email address used to obtain ssl certificate"
   type        = string
-  default     = "paul.boekschoten@hashicorp.com"
 }
 
 variable "route53_zone" {
   description = "the domain to use for the url"
   type        = string
-  default     = "tf-support.hashicorpdemo.com"
 }
 
 variable "route53_subdomain" {
   description = "the subdomain of the url"
   type        = string
-  default     = "paulskillsmap9tf2"
 }
 
 variable "name_tag" {

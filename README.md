@@ -22,28 +22,14 @@ Change directory
 cd skillsmap-infra-9
 ```
 
-# Check variables are correct in variables.tf  
-Especially the cert_email, route53_zone and route53_subdomain.
+# Check variables are correct in terraform.tfvars  
+Set your values for cert_email, route53_zone and route53_subdomain.
 ```
-variable "cert_email" {
-  description = "email address used to obtain ssl certificate"
-  type        = string
-  default     = "paul.boekschoten@hashicorp.com"
-}
-
-variable "route53_zone" {
-  description = "the domain to use for the url"
-  type        = string
-  default     = "tf-support.hashicorpdemo.com"
-}
-
-variable "route53_subdomain" {
-  description = "the subdomain of the url"
-  type        = string
-  default     = "paulskillsmap9tf2"
-}
+cert_email        = "paul.boekschoten@hashicorp.com"
+route53_zone      = "tf-support.hashicorpdemo.com"
+route53_subdomain = "paulskillsmap9tf2"
 ```  
-Replace the default values with the values you want to use.  
+  
 
 # Terraform init
 ```

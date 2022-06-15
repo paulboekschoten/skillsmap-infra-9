@@ -24,7 +24,7 @@ cd skillsmap-infra-9
 
 # Check variables are correct in variables.tf  
 Especially the cert_email, route53_zone and route53_subdomain.
-```json
+```
 variable "cert_email" {
   description = "email address used to obtain ssl certificate"
   type        = string
